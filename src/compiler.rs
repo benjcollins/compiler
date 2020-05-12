@@ -87,7 +87,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
         Expr::Func { name, pattern, expr } => {
             let func = Type::Func { pattern, expr, impls: Rc::new(RefCell::new(Vec::new())) };
             match name {
-                Some(name) => scope.define(name, func.clone()),
+                Some(name) => scope.assign(name, func.clone()),
                 None => (),
             };
             Ok(func)
@@ -98,7 +98,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
 fn match_pattern<'a, 'b>(pattern: &'b Parsed<'a, Expr<'a>>, ty: Type<'a, 'b>, scope: &mut Scope<'a, 'b>) -> Result<(), CompileError<'a>> {
     match pattern.get_node() {
         Expr::Ident => {
-            scope.define(pattern.get_source(), ty);
+            scope.assign(pattern.get_source(), ty);
             Ok(())
         }
         Expr::Tuple { exprs } => match ty {

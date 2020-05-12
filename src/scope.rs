@@ -20,11 +20,11 @@ impl<'a, 'b> Scope<'a, 'b> {
     pub fn new() -> Scope<'a, 'b> {
         Scope { node: Rc::new(RefCell::new(ScopeNode::Empty)) }
     }
-    pub fn define(&mut self, name: &'a str, ty: Type<'a, 'b>) {
-        self.node = Rc::new(RefCell::new(ScopeNode::Definition { previous: Rc::clone(&self.node), name, ty }))
-    }
-    pub fn assign(&mut self, search: &'a str, new_ty: Type<'a, 'b>) {
-        self.node.borrow_mut().assign(search, new_ty)
+    pub fn assign(&mut self, name: &'a str, ty: Type<'a, 'b>) {
+        let could_assign = self.node.borrow_mut().assign(name, &ty);
+        if !could_assign {
+            self.node = Rc::new(RefCell::new(ScopeNode::Definition { previous: Rc::clone(&self.node), name, ty }))
+        }
     }
     pub fn get(&self, search: &'a str) -> Option<Type<'a, 'b>> {
         self.node.borrow().get(search)
@@ -44,12 +44,13 @@ impl<'a, 'b> ScopeNode<'a, 'b> {
             }
         }
     }
-    pub fn assign(&mut self, search: &'a str, new_ty: Type<'a, 'b>) {
+    pub fn assign(&mut self, search: &'a str, new_ty: &Type<'a, 'b>) -> bool {
         match self {
-            ScopeNode::Empty => (),
+            ScopeNode::Empty => false,
             ScopeNode::Definition { name, ty, previous } => {
                 if name == &search {
-                    *ty = new_ty;
+                    *ty = new_ty.clone();
+                    true
                 } else {
                     previous.borrow_mut().assign(search, new_ty)
                 }
