@@ -64,13 +64,13 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                 "fn" => {
                     let name = match skip_spaces(end).next() {
                         Some((pos, ch)) if ch.is_alphabetic() => {
-                            let end = pos.next_while(|ch| ch.is_alphanumeric());
-                            Parsed::new(skip_spaces(end), end, Some(Position::slice(start, start)))
+                            let end_name = pos.next_while(|ch| ch.is_alphanumeric());
+                            Parsed::new(skip_spaces(end), end_name, Some(Position::slice(skip_spaces(end), end_name)))
                         }
-                        _ => Parsed::new(end, end, None),
+                        _ => Parsed::new(skip_spaces(end), skip_spaces(end), None),
                     };
                     let pattern = match skip_spaces(name.end()).next() {
-                        Some((_, '(')) => parse(skip_spaces(end), prec),
+                        Some((_, '(')) => parse(skip_spaces(name.end()), prec),
                         _ => Err(ParseError::expected_string(skip_spaces(end), "(")),
                     }?;
                     let expr = parse_block(skip_spaces(pattern.end()))?;
