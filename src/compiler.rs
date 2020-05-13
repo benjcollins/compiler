@@ -23,40 +23,47 @@ impl<'a> CompileError<'a> {
     }
 }
 
+pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
+    let returns = block.call(imp.function, argument_ty.vars_as_vec(), imp.return_ty.vars_as_vec().len(), function);
+    let return_ty = imp.return_ty.cast(&mut returns.iter());
+    return_ty
+}
+
 pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>, program: &mut Program, function: &mut Function, block: &mut Block) -> Result<Type<'a, 'b>, CompileError<'a>> {
     match expr.get_node() {
         Expr::IntLiteral => {
             let value = expr.get_source().parse::<i32>().unwrap();
-            Ok(Type::Int(block.constant_int(value, program)))
+            Ok(Type::Int(block.constant_int(value, function)))
         }
         Expr::Binary { left, right, op } => match op {
             BinaryOp::Plus => match (compile(left, scope, program, function, block)?, compile(right, scope, program, function, block)?) {
-                (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, program))),
+                (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, function))),
                 _ => Err(CompileError::type_error(expr.get_source()))
             }
             BinaryOp::Bracket => {
                 match compile(left, scope, program, function, block)? {
                     Type::Func { pattern, expr, impls } => {
-                        let args = compile(right, scope, program, function, block)?;
+                        let argument_ty = compile(right, scope, program, function, block)?;
                         for imp in impls.borrow().iter() {
-                            if imp.params == args {
-                                block.call(imp.function, args.vars_as_vec());
-                                return Ok(imp.returns.clone())
+                            if imp.param_ty == argument_ty {
+                                return Ok(call_function(imp, argument_ty, function, block))
                             }
                         }
                         let mut new_function = Function::new();
                         let mut new_block = Block::new();
-                        let params = args.as_paramater(program, &mut new_function);
+                        let param_ty = argument_ty.as_paramater(&mut new_function);
                         let mut function_scope = Scope::new();
-                        match_pattern(pattern, params.clone(), &mut function_scope)?;
-                        let returns = compile(expr, &mut function_scope, program, &mut new_function, &mut new_block)?;
+                        match_pattern(pattern, param_ty.clone(), &mut function_scope)?;
+                        let return_ty = compile(expr, &mut function_scope, program, &mut new_function, &mut new_block)?;
+                        return_ty.return_type(&mut new_function);
                         new_block.ret();
                         let new_block_id = new_function.add_block(new_block);
                         new_function.set_main(new_block_id);
                         let new_function_id = program.add_function(new_function);
-                        block.call(new_function_id, args.vars_as_vec());
-                        impls.borrow_mut().push(Implementation { params, returns: returns.clone(), function: new_function_id });
-                        Ok(returns)
+                        let imp = Implementation { param_ty, return_ty: return_ty.clone(), function: new_function_id };
+                        let return_ty = call_function(&imp, argument_ty, function, block);
+                        impls.borrow_mut().push(imp);
+                        Ok(return_ty)
                     }
                     _ => Err(CompileError::type_error(expr.get_source()))
                 }
