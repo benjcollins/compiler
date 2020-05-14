@@ -70,7 +70,7 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                         _ => Parsed::new(skip_spaces(end), skip_spaces(end), None),
                     };
                     let pattern = match skip_spaces(name.end()).next() {
-                        Some((_, '(')) => parse(skip_spaces(name.end()), prec),
+                        Some((_, '(')) => parse(skip_spaces(name.end()), Prec::Tuple),
                         _ => Err(ParseError::expected_string(skip_spaces(end), "(")),
                     }?;
                     let expr = parse_block(skip_spaces(pattern.end()))?;
@@ -83,7 +83,8 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
     }?;
 
     loop {
-        left = match skip_spaces(left.end()).next() {
+        let pos = skip_spaces(left.end());
+        left = match pos.next() {
             Some((pos, '+')) if prec < Prec::Bottom => {
                 Expr::new_binary(left, parse(skip_spaces(pos), prec)?, BinaryOp::Plus)
             }
@@ -91,21 +92,15 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                 Expr::new_binary(left, parse(skip_spaces(pos), Prec::Bottom)?, BinaryOp::SingleEquals)
             }
             Some((_, '(')) if prec < Prec::Bottom => {
-                let start = skip_spaces(left.end());
-                Expr::new_binary(left, parse(start, Prec::Bottom)?, BinaryOp::Bracket)
+                Expr::new_binary(left, parse(pos, Prec::Bottom)?, BinaryOp::Bracket)
             }
             Some((pos, ',')) if prec < Prec::Tuple => {
                 Expr::new_tuple(left, parse(skip_spaces(pos), Prec::Tuple)?)
             }
-            Some((pos, ';')) if prec < Prec::Block => {
-                Expr::new_block(left, parse(skip_spaces(pos), Prec::Block)?)
-            }
-            Some((_, ch)) => match left.get_node() {
-                Expr::Func { .. } if prec < Prec::Block && ch != '}' => {
-                    let start = skip_spaces(left.end());
-                    Expr::new_block(left, parse(start, Prec::Block)?)
-                }
-                _ => return Ok(left),
+            Some((_, ch)) => if prec < Prec::Block && ch != '}' {
+                Expr::new_block(left, parse(pos, Prec::Block)?)
+            } else {
+                return Ok(left)
             }
             None => return Ok(left)
         }
