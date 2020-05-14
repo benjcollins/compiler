@@ -10,6 +10,7 @@ pub struct Parsed<'a, T> {
 #[derive(Debug)]
 pub enum Expr<'a> {
     IntLiteral,
+    BoolLiteral,
     Ident,
     Tuple {
         exprs: Vec<Parsed<'a, Expr<'a>>>,
@@ -27,6 +28,10 @@ pub enum Expr<'a> {
         left: Box<Parsed<'a, Expr<'a>>>,
         right: Box<Parsed<'a, Expr<'a>>>,
         op: BinaryOp,
+    },
+    If {
+        cond: Box<Parsed<'a, Expr<'a>>>,
+        conc: Box<Parsed<'a, Expr<'a>>>,
     }
 }
 
@@ -35,6 +40,7 @@ pub enum BinaryOp {
     Plus,
     Bracket,
     SingleEquals,
+    Else,
 }
 
 impl<'a, T> Parsed<'a, T> {
