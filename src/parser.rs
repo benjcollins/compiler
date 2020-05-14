@@ -81,6 +81,7 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                     let conc = parse_block(skip_spaces(cond.end()))?;
                     Ok(Parsed::new(start, conc.end(), Expr::If { cond: Box::new(cond), conc: Box::new(conc) }))
                 }
+                "true" | "false" => Ok(Parsed::new(start, end, Expr::BoolLiteral)),
                 _ => Ok(Parsed::new(start, end, Expr::Ident)),
             }
         }
