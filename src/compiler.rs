@@ -1,6 +1,6 @@
 use crate::ast::{Parsed, Expr, BinaryOp};
 use crate::{scope::Scope, ir::{Program, Block, Function}, types::{Implementation, Type}};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
 #[derive(Debug)]
 pub struct CompileError<'a> {
@@ -24,8 +24,12 @@ impl<'a> CompileError<'a> {
 }
 
 pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
-    let returns = block.call(imp.function, argument_ty.vars_as_vec(), imp.return_ty.vars_as_vec().len(), function);
-    let return_ty = imp.return_ty.cast(&mut returns.iter());
+    let returns = block.call(imp.function, argument_ty.get_used_vars(), imp.return_ty.get_used_vars().len(), function);
+    let mut map = HashMap::new();
+    for (i, var) in imp.return_ty.get_used_vars().iter().enumerate() {
+        map.insert(*var, returns[i]);
+    }
+    let return_ty = imp.return_ty.map_to(&map);
     return_ty
 }
 
@@ -51,11 +55,11 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                         }
                         let mut new_function = Function::new();
                         let mut new_block = Block::new();
-                        let param_ty = argument_ty.as_paramater(&mut new_function);
+                        let param_ty = argument_ty.as_parameter_ty(&mut new_function);
                         let mut function_scope = Scope::new();
                         match_pattern(pattern, param_ty.clone(), &mut function_scope)?;
                         let return_ty = compile(expr, &mut function_scope, program, &mut new_function, &mut new_block)?;
-                        return_ty.return_type(&mut new_function);
+                        return_ty.return_ty(&mut new_function);
                         new_block.ret();
                         let new_block_id = new_function.add_block(new_block);
                         new_function.set_main(new_block_id);
@@ -73,7 +77,9 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                 match_pattern(left, ty.clone(), scope)?;
                 Ok(ty)
             }
+            BinaryOp::Else => unimplemented!(),
         }
+        Expr::If { cond, conc } => unimplemented!(),
         Expr::Tuple { exprs } => {
             let mut types = Vec::new();
             for expr in exprs {
