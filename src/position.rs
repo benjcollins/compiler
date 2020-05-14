@@ -10,7 +10,7 @@ impl<'a> Position<'a> {
         Position { line, column, source }
     }
     pub fn from_source(source: &'a str) -> Position<'a> {
-        Position::new(1, 0, source)
+        Position::new(1, 1, source)
     }
     pub fn next(&self) -> Option<(Position<'a>, char)> {
         let mut chars = self.source.chars();
