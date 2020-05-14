@@ -76,6 +76,11 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                     let expr = parse_block(skip_spaces(pattern.end()))?;
                     Ok(Parsed::new(start, expr.end(), Expr::Func { name: name.node, pattern: Box::new(pattern), expr: Box::new(expr) }))
                 }
+                "if" => {
+                    let cond = parse(skip_spaces(end), Prec::Tuple)?;
+                    let conc = parse_block(skip_spaces(cond.end()))?;
+                    Ok(Parsed::new(start, conc.end(), Expr::If { cond: Box::new(cond), conc: Box::new(conc) }))
+                }
                 _ => Ok(Parsed::new(start, end, Expr::Ident)),
             }
         }
@@ -83,8 +88,8 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
     }?;
 
     loop {
-        let pos = skip_spaces(left.end());
-        left = match pos.next() {
+        let start = skip_spaces(left.end());
+        left = match start.next() {
             Some((pos, '+')) if prec < Prec::Bottom => {
                 Expr::new_binary(left, parse(skip_spaces(pos), prec)?, BinaryOp::Plus)
             }
@@ -92,17 +97,24 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                 Expr::new_binary(left, parse(skip_spaces(pos), Prec::Bottom)?, BinaryOp::SingleEquals)
             }
             Some((_, '(')) if prec < Prec::Bottom => {
-                Expr::new_binary(left, parse(pos, Prec::Bottom)?, BinaryOp::Bracket)
+                Expr::new_binary(left, parse(start, Prec::Bottom)?, BinaryOp::Bracket)
             }
             Some((pos, ',')) if prec < Prec::Tuple => {
                 Expr::new_tuple(left, parse(skip_spaces(pos), Prec::Tuple)?)
             }
-            Some((_, ch)) => if prec < Prec::Block && ch != '}' {
-                Expr::new_block(left, parse(pos, Prec::Block)?)
-            } else {
-                return Ok(left)
+            Some((_, ch)) if ch.is_alphabetic() => {
+                let end = start.next_while(|ch| ch.is_alphabetic());
+                let keyword = Position::slice(start, end);
+                match keyword {
+                    "else" => Expr::new_binary(left, parse_block(skip_spaces(end))?, BinaryOp::Else),
+                    _ => if prec < Prec::Block && ch != '}' {
+                        Expr::new_block(left, parse(start, Prec::Block)?)
+                    } else {
+                        return Ok(left)
+                    }
+                }
             }
-            None => return Ok(left)
+            _ => return Ok(left)
         }
     }
 }
