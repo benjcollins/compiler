@@ -1,5 +1,5 @@
 use std::{rc::Rc, cell::RefCell, slice::Iter};
-use crate::ir::{Program, Var, FunctionId, Block, Function};
+use crate::ir::{Var, FunctionId, Block, Function};
 use crate::ast::{Parsed, Expr};
 
 #[derive(Debug, Clone)]
