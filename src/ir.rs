@@ -52,7 +52,7 @@ pub enum Instruction {
     Return,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct Var {
     id: usize,
 }
@@ -132,7 +132,7 @@ impl Block {
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (function_id, function) in self.functions.iter().enumerate() {
-            write!(f, "fn {} (", function_id)?;
+            write!(f, "f{} (", function_id)?;
             let mut iter = function.params.iter();
             if let Some(param) = iter.next() {
                 write!(f, "r{}", param.id)?;
@@ -179,7 +179,7 @@ impl fmt::Display for Program {
                                 }
                                 write!(f, " = ")?;
                             }
-                            write!(f, "call {} (", function.id)?;
+                            write!(f, "call f{} (", function.id)?;
                             let mut iter = args.iter();
                             if let Some(var) = iter.next() {
                                 write!(f, "r{}", var.id)?;
