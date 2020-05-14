@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell, slice::Iter, collections::{HashSet, HashMap}};
+use std::{rc::Rc, cell::RefCell, collections::{HashSet, HashMap}};
 use crate::ir::{Var, FunctionId, Block, Function};
 use crate::ast::{Parsed, Expr};
 
@@ -33,6 +33,8 @@ impl<'a, 'b> PartialEq for Type<'a, 'b> {
         }
     }
 }
+
+impl<'a, 'b> Eq for Type<'a, 'b> {}
 
 impl<'a, 'b> Type<'a, 'b> {
     pub fn merge(a: Type<'a, 'b>, b: Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Option<Type<'a, 'b>> {
