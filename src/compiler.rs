@@ -35,8 +35,8 @@ pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a,
 
 pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>, program: &mut Program, function: &mut Function, block: &mut Block) -> Result<Type<'a, 'b>, CompileError<'a>> {
     match expr.get_node() {
-        Expr::IntLiteral => {
-            let value = expr.get_source().parse::<i32>().unwrap();
+        Expr::IntLiteral(source) => {
+            let value = source.parse::<i32>().unwrap();
             Ok(Type::Int(block.constant_int(value, function)))
         }
         Expr::Binary { left, right, op } => match op {
@@ -107,7 +107,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             }
             compile(last, scope, program, function, block)
         },
-        Expr::Ident => match scope.get(expr.get_source()) {
+        Expr::Ident(source) => match scope.get(source) {
             Some(ty) => Ok(ty),
             None => Err(CompileError::undefined_variable(expr.get_source())),
         }
@@ -119,16 +119,16 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             };
             Ok(func)
         },
-        Expr::BoolLiteral => {
-            Ok(Type::Bool(block.constant_int(if expr.get_source() == "true" { 1 } else { 0 }, function)))
+        Expr::BoolLiteral(source) => {
+            Ok(Type::Bool(block.constant_int(if source == &"true" { 1 } else { 0 }, function)))
         }
     }
 }
 
 fn match_pattern<'a, 'b>(pattern: &'b Parsed<'a, Expr<'a>>, ty: Type<'a, 'b>, scope: &mut Scope<'a, 'b>) -> Result<(), CompileError<'a>> {
     match pattern.get_node() {
-        Expr::Ident => {
-            scope.assign(pattern.get_source(), ty);
+        Expr::Ident(source) => {
+            scope.assign(source, ty);
             Ok(())
         }
         Expr::Tuple { exprs } => match ty {

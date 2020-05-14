@@ -49,7 +49,7 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
     let mut left = match start.next() {
         Some((pos, ch)) if ch.is_numeric() => {
             let end = pos.next_while(|ch| ch.is_numeric());
-            Ok(Parsed::new(start, end, Expr::IntLiteral))
+            Ok(Parsed::new(start, end, Expr::IntLiteral(Position::slice(start, end))))
         }
         Some((pos, '(')) => {
             let expr = parse(skip_spaces(pos), Prec::Block)?;
@@ -81,8 +81,8 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                     let conc = parse_block(skip_spaces(cond.end()))?;
                     Ok(Parsed::new(start, conc.end(), Expr::If { cond: Box::new(cond), conc: Box::new(conc) }))
                 }
-                "true" | "false" => Ok(Parsed::new(start, end, Expr::BoolLiteral)),
-                _ => Ok(Parsed::new(start, end, Expr::Ident)),
+                "true" | "false" => Ok(Parsed::new(start, end, Expr::BoolLiteral(Position::slice(start, end)))),
+                _ => Ok(Parsed::new(start, end, Expr::Ident(Position::slice(start, end)))),
             }
         }
         _ => Err(ParseError::expected_value(start))

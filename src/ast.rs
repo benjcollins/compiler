@@ -9,9 +9,9 @@ pub struct Parsed<'a, T> {
 
 #[derive(Debug)]
 pub enum Expr<'a> {
-    IntLiteral,
-    BoolLiteral,
-    Ident,
+    IntLiteral(&'a str),
+    BoolLiteral(&'a str),
+    Ident(&'a str),
     Tuple {
         exprs: Vec<Parsed<'a, Expr<'a>>>,
     },
