@@ -10,7 +10,6 @@ pub struct Function {
     returns: Vec<Var>,
     variable_count: usize,
     blocks: Vec<Block>,
-    main: BlockId,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -21,6 +20,7 @@ pub struct FunctionId {
 #[derive(Debug, Clone)]
 pub struct Block {
     insts: Vec<Instruction>,
+    id: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -49,6 +49,13 @@ pub enum Instruction {
         args: Vec<Var>,
         returns: Vec<Var>,
     },
+    Branch {
+        block: BlockId,
+    },
+    BranchIf {
+        cond: Var,
+        block: BlockId,
+    },
     Return,
 }
 
@@ -72,10 +79,7 @@ impl Program {
 
 impl Function {
     pub fn new() -> Function {
-        Function { params: vec![], blocks: vec![], returns: vec![], variable_count: 0, main: BlockId { id: 0 } }
-    }
-    pub fn set_main(&mut self, block: BlockId) {
-        self.main = block
+        Function { params: vec![], blocks: vec![], returns: vec![], variable_count: 0 }
     }
     fn new_local_variable(&mut self) -> Var {
         let variable = Var { id: self.variable_count };
@@ -90,16 +94,20 @@ impl Function {
     pub fn return_var(&mut self, var: Var) {
         self.returns.push(var)
     }
-    pub fn add_block(&mut self, block: Block) -> BlockId {
-        let id = self.blocks.len();
-        self.blocks.push(block);
-        BlockId { id }
+    pub fn new_block(&mut self) -> Block {
+        let block = Block { id: self.blocks.len(), insts: vec![] };
+        self.blocks.push(Block { id: self.blocks.len(), insts: vec![] });
+        block
+    }
+    pub fn submit_block(&mut self, block: Block) {
+        let id = block.id;
+        self.blocks[id] = block;
     }
 }
 
 impl Block {
-    pub fn new() -> Block {
-        Block { insts: vec![] }
+    pub fn get_id(&self) -> BlockId {
+        BlockId { id: self.id }
     }
     pub fn add_int(&mut self, a: Var, b: Var, function: &mut Function) -> Var {
         let dest = function.new_local_variable();
@@ -127,6 +135,12 @@ impl Block {
     pub fn ret(&mut self) {
         self.insts.push(Instruction::Return)
     }
+    pub fn branch_if(&mut self, cond: Var, block: BlockId) {
+        self.insts.push(Instruction::BranchIf { cond, block })
+    }
+    pub fn branch(&mut self, block: BlockId) {
+        self.insts.push(Instruction::Branch { block })
+    }
 }
 
 impl fmt::Display for Program {
@@ -150,10 +164,10 @@ impl fmt::Display for Program {
             }
             writeln!(f, "")?;
             for (block_id, block) in function.blocks.iter().enumerate() {
-                if block_id == function.main.id {
+                if block_id == 0 {
                     writeln!(f, "    main:")?;
                 } else {
-                    writeln!(f, "    {}:", block_id)?;
+                    writeln!(f, "    b{}:", block_id)?;
                 }
                 for inst in block.insts.iter() {
                     write!(f, "        ")?;
@@ -188,6 +202,12 @@ impl fmt::Display for Program {
                                 }
                             }
                             writeln!(f, ")")?;
+                        }
+                        Instruction::BranchIf { cond, block } => {
+                            writeln!(f, "if r{} goto b{}", cond.id, block.id)?;
+                        }
+                        Instruction::Branch { block } => {
+                            writeln!(f, "goto b{}", block.id)?;
                         }
                     }
                 }
