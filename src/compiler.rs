@@ -1,5 +1,5 @@
 use crate::ast::{Parsed, Expr, BinaryOp};
-use crate::{scope::Scope, ir::{Program, Block, Function}, types::{Implementation, Type}};
+use crate::{scope::Scope, ir::{Program, Block, Function, Var}, types::{Implementation, Type}};
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
 #[derive(Debug)]
@@ -40,9 +40,13 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             Ok(Type::Int(block.constant_int(value, function)))
         }
         Expr::Binary { left, right, op } => match op {
-            BinaryOp::Plus => match (compile(left, scope, program, function, block)?, compile(right, scope, program, function, block)?) {
-                (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, function))),
-                _ => Err(CompileError::type_error(expr.get_source()))
+            BinaryOp::Plus => {
+                let left = compile(left, scope, program, function, block)?;
+                let right = compile(right, scope, program, function, block)?;
+                match (left, right) {
+                    (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, function))),
+                    _ => Err(CompileError::type_error(expr.get_source()))
+                }
             }
             BinaryOp::Bracket => {
                 match compile(left, scope, program, function, block)? {
@@ -76,7 +80,18 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                 match_pattern(left, ty.clone(), scope)?;
                 Ok(ty)
             }
-            BinaryOp::Else => unimplemented!(),
+            BinaryOp::DoubleEquals => unimplemented!(),
+            // BinaryOp::Else => {
+            //     if let Type::Either(tag, types) = compile(left, scope, program, function, block)? {
+            //         for (i, ty) in types.iter().enumerate() {
+            //             if ty == &Type::Nothing {
+            //                 types[i] = compile(right, scope, program, function, block)
+            //             }
+            //         }
+            //     }
+            //     return Err(CompileError::type_error(expr.get_source()))
+            // },
+            BinaryOp::Else => unimplemented!()
         }
         Expr::If { cond, conc } => {
             if let Type::Bool(cond) = compile(cond, scope, program, function, block)? {
