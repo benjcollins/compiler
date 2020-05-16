@@ -97,7 +97,7 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
             Some((pos, '=')) if prec < Prec::Bottom => {
                 Expr::new_binary(left, parse(skip_spaces(pos), Prec::Bottom)?, BinaryOp::SingleEquals)
             }
-            Some((_, '(')) if prec < Prec::Bottom => {
+            Some((_, '(')) => {
                 Expr::new_binary(left, parse(start, Prec::Bottom)?, BinaryOp::Bracket)
             }
             Some((pos, ',')) if prec < Prec::Tuple => {
