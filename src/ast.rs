@@ -41,6 +41,7 @@ pub enum BinaryOp {
     Bracket,
     SingleEquals,
     Else,
+    DoubleEquals,
 }
 
 impl<'a, T> Parsed<'a, T> {
