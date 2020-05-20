@@ -24,13 +24,8 @@ impl<'a> CompileError<'a> {
 }
 
 pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
-    let returns = block.call(imp.function, argument_ty.get_used_vars(), imp.return_ty.get_used_vars().len(), function);
-    let mut map = HashMap::new();
-    for (i, var) in imp.return_ty.get_used_vars().iter().enumerate() {
-        map.insert(*var, returns[i]);
-    }
-    let return_ty = imp.return_ty.map_to(&map);
-    return_ty
+    let returns = block.call(imp.function, argument_ty.get_used_vars(), imp.return_ty.size(), function);
+    imp.return_ty.map_to(&returns)
 }
 
 pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>, program: &mut Program, function: &mut Function, block: &mut Block) -> Result<Type<'a, 'b>, CompileError<'a>> {
@@ -81,30 +76,37 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                 Ok(ty)
             }
             BinaryOp::DoubleEquals => unimplemented!(),
-            // BinaryOp::Else => {
-            //     if let Type::Either(tag, types) = compile(left, scope, program, function, block)? {
-            //         for (i, ty) in types.iter().enumerate() {
-            //             if ty == &Type::Nothing {
-            //                 types[i] = compile(right, scope, program, function, block)
-            //             }
-            //         }
-            //     }
-            //     return Err(CompileError::type_error(expr.get_source()))
-            // },
-            BinaryOp::Else => unimplemented!()
+            BinaryOp::Else => {
+                if let Type::Maybe(tag, ty) = compile(left, scope, program, function, block)? {
+                    let mut cond_block = function.new_block();
+                    let exit_block = function.new_block();
+                    let conc = compile(right, scope, program, function, &mut cond_block)?;
+                    block.branch_if(tag, cond_block.get_id());
+                    block.branch(exit_block.get_id());
+                    cond_block.branch(exit_block.get_id());
+                    function.submit_block(block.clone());
+                    function.submit_block(cond_block);
+                    *block = exit_block;
+                    Ok(Type::merge(&*ty, &conc, function, block))
+                } else {
+                    Err(CompileError::type_error(expr.get_source()))
+                }
+            },
         }
         Expr::If { cond, conc } => {
             if let Type::Bool(cond) = compile(cond, scope, program, function, block)? {
                 let mut cond_block = function.new_block();
                 let exit_block = function.new_block();
                 let conc = compile(conc, scope, program, function, &mut cond_block)?;
+                let tag_none = block.constant_int(0, function);
+                let tag_some = cond_block.constant_int(1, function);
                 block.branch_if(cond, cond_block.get_id());
                 cond_block.branch(exit_block.get_id());
                 block.branch(exit_block.get_id());
                 function.submit_block(block.clone());
                 function.submit_block(cond_block);
                 *block = exit_block;
-                Ok(Type::Either(cond, vec![conc, Type::Nothing]))
+                Ok(Type::Maybe(block.phi(tag_none, tag_some, function), Box::new(conc)))
             } else {
                 Err(CompileError::type_error(expr.get_source()))
             }
