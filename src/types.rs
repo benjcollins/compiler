@@ -43,14 +43,14 @@ impl<'a, 'b> PartialEq for Type<'a, 'b> {
 impl<'a, 'b> Eq for Type<'a, 'b> {}
 
 impl<'a, 'b> Type<'a, 'b> {
-    pub fn merge(a: &Type<'a, 'b>, b: &Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
+    pub fn merge(cond: Var, a: &Type<'a, 'b>, b: &Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
         match (a, b) {
-            (Type::Int(a), Type::Int(b)) => Type::Int(block.phi(*a, *b, function)),
-            (Type::Bool(a), Type::Bool(b)) => Type::Bool(block.phi(*a, *b, function)),
+            (Type::Int(a), Type::Int(b)) => Type::Int(block.phi(cond, *a, *b, function)),
+            (Type::Bool(a), Type::Bool(b)) => Type::Bool(block.phi(cond, *a, *b, function)),
             (Type::Tuple(atypes), Type::Tuple(btypes)) if atypes.len() == btypes.len() => {
                 let mut types = vec![];
                 for (a, b) in atypes.iter().zip(btypes) {
-                    types.push(Type::merge(a, b, function, block))
+                    types.push(Type::merge(cond, a, b, function, block))
                 }
                 Type::Tuple(types)
             }

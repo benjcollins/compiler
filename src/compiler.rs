@@ -1,6 +1,6 @@
 use crate::ast::{Parsed, Expr, BinaryOp};
-use crate::{scope::Scope, ir::{Program, Block, Function, Var}, types::{Implementation, Type}};
-use std::{cell::RefCell, rc::Rc, collections::HashMap};
+use crate::{scope::Scope, ir::{Program, Block, Function}, types::{Implementation, Type}};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct CompileError<'a> {
@@ -75,19 +75,15 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                 match_pattern(left, ty.clone(), scope)?;
                 Ok(ty)
             }
-            BinaryOp::DoubleEquals => unimplemented!(),
             BinaryOp::Else => {
                 if let Type::Maybe(tag, ty) = compile(left, scope, program, function, block)? {
-                    let mut cond_block = function.new_block();
                     let exit_block = function.new_block();
-                    let conc = compile(right, scope, program, function, &mut cond_block)?;
-                    block.branch_if(tag, cond_block.get_id());
+                    block.branch_if(tag, exit_block.get_id());
+                    let conc = compile(right, scope, program, function, block)?;
                     block.branch(exit_block.get_id());
-                    cond_block.branch(exit_block.get_id());
                     function.submit_block(block.clone());
-                    function.submit_block(cond_block);
                     *block = exit_block;
-                    Ok(Type::merge(&*ty, &conc, function, block))
+                    Ok(Type::merge(tag, &*ty, &conc, function, block))
                 } else {
                     Err(CompileError::type_error(expr.get_source()))
                 }
@@ -98,15 +94,13 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                 let mut cond_block = function.new_block();
                 let exit_block = function.new_block();
                 let conc = compile(conc, scope, program, function, &mut cond_block)?;
-                let tag_none = block.constant_int(0, function);
-                let tag_some = cond_block.constant_int(1, function);
                 block.branch_if(cond, cond_block.get_id());
                 cond_block.branch(exit_block.get_id());
                 block.branch(exit_block.get_id());
                 function.submit_block(block.clone());
                 function.submit_block(cond_block);
                 *block = exit_block;
-                Ok(Type::Maybe(block.phi(tag_none, tag_some, function), Box::new(conc)))
+                Ok(Type::Maybe(cond, Box::new(conc)))
             } else {
                 Err(CompileError::type_error(expr.get_source()))
             }
@@ -137,7 +131,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             Ok(func)
         },
         Expr::BoolLiteral(source) => {
-            Ok(Type::Bool(block.constant_int(if source == &"true" { 1 } else { 0 }, function)))
+            Ok(Type::Bool(block.constant_int(if *source == "true" { 1 } else { 0 }, function)))
         }
     }
 }
