@@ -1,12 +1,12 @@
 use std::{rc::Rc, cell::RefCell, collections::{HashSet, HashMap}};
-use crate::ir::{Var, FunctionId, Block, Function};
+use crate::ir::{VarId, FunctionId, Block, Function};
 use crate::ast::{Parsed, Expr};
 
 #[derive(Debug, Clone)]
 pub enum Type<'a, 'b> {
-    Int(Var),
-    Bool(Var),
-    Maybe(Var, Box<Type<'a, 'b>>),
+    Int(VarId),
+    Bool(VarId),
+    Maybe(VarId, Box<Type<'a, 'b>>),
     Tuple(Vec<Type<'a, 'b>>),
     Func {
         pattern: &'b Parsed<'a, Expr<'a>>,
@@ -43,7 +43,7 @@ impl<'a, 'b> PartialEq for Type<'a, 'b> {
 impl<'a, 'b> Eq for Type<'a, 'b> {}
 
 impl<'a, 'b> Type<'a, 'b> {
-    pub fn merge(cond: Var, a: &Type<'a, 'b>, b: &Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
+    pub fn merge(cond: VarId, a: &Type<'a, 'b>, b: &Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
         match (a, b) {
             (Type::Int(a), Type::Int(b)) => Type::Int(block.phi(cond, *a, *b, function)),
             (Type::Bool(a), Type::Bool(b)) => Type::Bool(block.phi(cond, *a, *b, function)),
@@ -57,12 +57,12 @@ impl<'a, 'b> Type<'a, 'b> {
             _ => unimplemented!(),
         }
     }
-    pub fn get_used_vars(&self) -> Vec<Var> {
+    pub fn get_used_vars(&self) -> Vec<VarId> {
         let mut vars = Vec::new();
         self.add_vars_to_vec(&mut vars);
-        vars.iter().cloned().collect::<Vec<Var>>()
+        vars.iter().cloned().collect::<Vec<VarId>>()
     }
-    pub fn add_vars_to_vec(&self, map: &mut Vec<Var>) {
+    pub fn add_vars_to_vec(&self, map: &mut Vec<VarId>) {
         match self {
             Type::Int(var) => { map.push(*var); },
             Type::Bool(var) => { map.push(*var); },
@@ -76,7 +76,7 @@ impl<'a, 'b> Type<'a, 'b> {
             Type::Func { .. } => (),
         }
     }
-    pub fn map_to(&self, mut vars: &[Var]) -> Type<'a, 'b> {
+    pub fn map_to(&self, mut vars: &[VarId]) -> Type<'a, 'b> {
         match self {
             Type::Int(_) => Type::Int(vars[0]),
             Type::Bool(_) => Type::Bool(vars[0]),

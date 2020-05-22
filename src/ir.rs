@@ -6,8 +6,8 @@ pub struct Program {
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    params: Vec<Var>,
-    returns: Vec<Var>,
+    params: Vec<VarId>,
+    returns: Vec<VarId>,
     variable_count: usize,
     blocks: Vec<Block>,
 }
@@ -31,36 +31,37 @@ pub struct BlockId {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     AddInt {
-        dest: Var,
-        a: Var,
-        b: Var,
+        dest: VarId,
+        a: VarId,
+        b: VarId,
     },
     ConstantInt {
-        dest: Var,
+        dest: VarId,
         constant: i32,
     },
     Phi {
-        a: Var,
-        b: Var,
-        dest: Var,
+        cond: VarId,
+        a: VarId,
+        b: VarId,
+        dest: VarId,
     },
     Call {
         function: FunctionId,
-        args: Vec<Var>,
-        returns: Vec<Var>,
+        args: Vec<VarId>,
+        returns: Vec<VarId>,
     },
     Branch {
         block: BlockId,
     },
     BranchIf {
-        cond: Var,
+        cond: VarId,
         block: BlockId,
     },
     Return,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct Var {
+pub struct VarId {
     id: usize,
 }
 
@@ -81,17 +82,17 @@ impl Function {
     pub fn new() -> Function {
         Function { params: vec![], blocks: vec![], returns: vec![], variable_count: 0 }
     }
-    fn new_local_variable(&mut self) -> Var {
-        let variable = Var { id: self.variable_count };
+    fn new_local_variable(&mut self) -> VarId {
+        let variable = VarId { id: self.variable_count };
         self.variable_count += 1;
         variable
     }
-    pub fn new_parameter(&mut self) -> Var {
+    pub fn new_parameter(&mut self) -> VarId {
         let var = self.new_local_variable();
         self.params.push(var);
         var
     }
-    pub fn return_var(&mut self, var: Var) {
+    pub fn return_var(&mut self, var: VarId) {
         self.returns.push(var)
     }
     pub fn new_block(&mut self) -> Block {
@@ -109,22 +110,22 @@ impl Block {
     pub fn get_id(&self) -> BlockId {
         BlockId { id: self.id }
     }
-    pub fn add_int(&mut self, a: Var, b: Var, function: &mut Function) -> Var {
+    pub fn add_int(&mut self, a: VarId, b: VarId, function: &mut Function) -> VarId {
         let dest = function.new_local_variable();
         self.insts.push(Instruction::AddInt { dest, a, b });
         dest
     }
-    pub fn constant_int(&mut self, constant: i32, function: &mut Function) -> Var {
+    pub fn constant_int(&mut self, constant: i32, function: &mut Function) -> VarId {
         let dest = function.new_local_variable();
         self.insts.push(Instruction::ConstantInt { dest, constant });
         dest
     }
-    pub fn phi(&mut self, a: Var, b: Var, function: &mut Function) -> Var {
+    pub fn phi(&mut self, cond: VarId, a: VarId, b: VarId, function: &mut Function) -> VarId {
         let dest = function.new_local_variable();
-        self.insts.push(Instruction::Phi { dest, a, b });
+        self.insts.push(Instruction::Phi { dest, cond, a, b });
         dest
     }
-    pub fn call(&mut self, target_function_id: FunctionId, args: Vec<Var>, return_count: usize, function: &mut Function) -> Vec<Var> {
+    pub fn call(&mut self, target_function_id: FunctionId, args: Vec<VarId>, return_count: usize, function: &mut Function) -> Vec<VarId> {
         let mut returns = Vec::new();
         for _ in 0..return_count {
             returns.push(function.new_local_variable())
@@ -135,7 +136,7 @@ impl Block {
     pub fn ret(&mut self) {
         self.insts.push(Instruction::Return)
     }
-    pub fn branch_if(&mut self, cond: Var, block: BlockId) {
+    pub fn branch_if(&mut self, cond: VarId, block: BlockId) {
         self.insts.push(Instruction::BranchIf { cond, block })
     }
     pub fn branch(&mut self, block: BlockId) {
@@ -178,8 +179,8 @@ impl fmt::Display for Program {
                         Instruction::ConstantInt { dest, constant } => {
                             writeln!(f, "r{} = {}", dest.id, constant)?
                         }
-                        Instruction::Phi { dest, a, b } => {
-                            writeln!(f, "r{} = phi(r{}, r{})", dest.id, a.id, b.id)?
+                        Instruction::Phi { dest, cond, a, b } => {
+                            writeln!(f, "r{} = phi(r{}, r{}, r{})", dest.id, cond.id, a.id, b.id)?
                         }
                         Instruction::Return => {
                             writeln!(f, "return")?
