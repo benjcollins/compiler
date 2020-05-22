@@ -59,8 +59,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                         match_pattern(pattern, param_ty.clone(), &mut function_scope)?;
                         let return_ty = compile(expr, &mut function_scope, program, &mut new_function, &mut new_block)?;
                         return_ty.return_ty(&mut new_function);
-                        new_block.ret();
-                        new_function.submit_block(new_block);
+                        new_block.ret(function);
                         let new_function_id = program.add_function(new_function);
                         let imp = Implementation { param_ty, return_ty: return_ty.clone(), function: new_function_id };
                         let return_ty = call_function(&imp, argument_ty, function, block);
@@ -77,11 +76,11 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             }
             BinaryOp::Else => {
                 if let Type::Maybe(tag, ty) = compile(left, scope, program, function, block)? {
+                    let mut cond_block = function.new_block();
                     let exit_block = function.new_block();
-                    block.branch_if(tag, exit_block.get_id());
-                    let conc = compile(right, scope, program, function, block)?;
-                    block.branch(exit_block.get_id());
-                    function.submit_block(block.clone());
+                    block.clone().conditional_branch(tag, exit_block.get_id(), cond_block.get_id(), function);
+                    let conc = compile(right, scope, program, function, &mut cond_block)?;
+                    cond_block.branch(exit_block.get_id(), function);
                     *block = exit_block;
                     Ok(Type::merge(tag, &*ty, &conc, function, block))
                 } else {
@@ -93,12 +92,9 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             if let Type::Bool(cond) = compile(cond, scope, program, function, block)? {
                 let mut cond_block = function.new_block();
                 let exit_block = function.new_block();
+                block.clone().conditional_branch(cond, cond_block.get_id(), exit_block.get_id(), function);
                 let conc = compile(conc, scope, program, function, &mut cond_block)?;
-                block.branch_if(cond, cond_block.get_id());
-                cond_block.branch(exit_block.get_id());
-                block.branch(exit_block.get_id());
-                function.submit_block(block.clone());
-                function.submit_block(cond_block);
+                cond_block.branch(exit_block.get_id(), function);
                 *block = exit_block;
                 Ok(Type::Maybe(cond, Box::new(conc)))
             } else {

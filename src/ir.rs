@@ -6,8 +6,8 @@ pub struct Program {
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    params: Vec<VarId>,
-    returns: Vec<VarId>,
+    params: Vec<Var>,
+    returns: Vec<Var>,
     variable_count: usize,
     blocks: Vec<Block>,
 }
@@ -20,6 +20,7 @@ pub struct FunctionId {
 #[derive(Debug, Clone)]
 pub struct Block {
     insts: Vec<Instruction>,
+    exit: ExitInstruction,
     id: usize,
 }
 
@@ -31,37 +32,42 @@ pub struct BlockId {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     AddInt {
-        dest: VarId,
-        a: VarId,
-        b: VarId,
+        dest: Var,
+        a: Var,
+        b: Var,
     },
     ConstantInt {
-        dest: VarId,
+        dest: Var,
         constant: i32,
     },
     Phi {
-        cond: VarId,
-        a: VarId,
-        b: VarId,
-        dest: VarId,
+        cond: Var,
+        a: Var,
+        b: Var,
+        dest: Var,
     },
     Call {
         function: FunctionId,
-        args: Vec<VarId>,
-        returns: Vec<VarId>,
+        args: Vec<Var>,
+        returns: Vec<Var>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum ExitInstruction {
     Branch {
         block: BlockId,
     },
-    BranchIf {
-        cond: VarId,
-        block: BlockId,
+    ConditionalBranch {
+        cond: Var,
+        block1: BlockId,
+        block2: BlockId,
     },
     Return,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct VarId {
+pub struct Var {
     id: usize,
 }
 
@@ -82,27 +88,33 @@ impl Function {
     pub fn new() -> Function {
         Function { params: vec![], blocks: vec![], returns: vec![], variable_count: 0 }
     }
-    fn new_local_variable(&mut self) -> VarId {
-        let variable = VarId { id: self.variable_count };
+    fn new_local_variable(&mut self) -> Var {
+        let variable = Var { id: self.variable_count };
         self.variable_count += 1;
         variable
     }
-    pub fn new_parameter(&mut self) -> VarId {
+    pub fn new_parameter(&mut self) -> Var {
         let var = self.new_local_variable();
         self.params.push(var);
         var
     }
-    pub fn return_var(&mut self, var: VarId) {
+    pub fn return_var(&mut self, var: Var) {
         self.returns.push(var)
     }
     pub fn new_block(&mut self) -> Block {
-        let block = Block { id: self.blocks.len(), insts: vec![] };
-        self.blocks.push(Block { id: self.blocks.len(), insts: vec![] });
+        let block = Block { id: self.blocks.len(), insts: vec![], exit: ExitInstruction::Return };
+        self.blocks.push(block.clone());
         block
     }
-    pub fn submit_block(&mut self, block: Block) {
+    fn submit_block(&mut self, block: Block) {
         let id = block.id;
         self.blocks[id] = block;
+    }
+    pub fn get_variable_count(&self) -> usize {
+        self.variable_count
+    }
+    pub fn get_block(&mut self, id: BlockId) -> &mut Block {
+        &mut self.blocks[id.id]
     }
 }
 
@@ -110,22 +122,22 @@ impl Block {
     pub fn get_id(&self) -> BlockId {
         BlockId { id: self.id }
     }
-    pub fn add_int(&mut self, a: VarId, b: VarId, function: &mut Function) -> VarId {
+    pub fn add_int(&mut self, a: Var, b: Var, function: &mut Function) -> Var {
         let dest = function.new_local_variable();
         self.insts.push(Instruction::AddInt { dest, a, b });
         dest
     }
-    pub fn constant_int(&mut self, constant: i32, function: &mut Function) -> VarId {
+    pub fn constant_int(&mut self, constant: i32, function: &mut Function) -> Var {
         let dest = function.new_local_variable();
         self.insts.push(Instruction::ConstantInt { dest, constant });
         dest
     }
-    pub fn phi(&mut self, cond: VarId, a: VarId, b: VarId, function: &mut Function) -> VarId {
+    pub fn phi(&mut self, cond: Var, a: Var, b: Var, function: &mut Function) -> Var {
         let dest = function.new_local_variable();
         self.insts.push(Instruction::Phi { dest, cond, a, b });
         dest
     }
-    pub fn call(&mut self, target_function_id: FunctionId, args: Vec<VarId>, return_count: usize, function: &mut Function) -> Vec<VarId> {
+    pub fn call(&mut self, target_function_id: FunctionId, args: Vec<Var>, return_count: usize, function: &mut Function) -> Vec<Var> {
         let mut returns = Vec::new();
         for _ in 0..return_count {
             returns.push(function.new_local_variable())
@@ -133,14 +145,20 @@ impl Block {
         self.insts.push(Instruction::Call { function: target_function_id, args, returns: returns.clone() });
         returns
     }
-    pub fn ret(&mut self) {
-        self.insts.push(Instruction::Return)
+    pub fn ret(mut self, function: &mut Function) {
+        self.exit = ExitInstruction::Return;
+        function.submit_block(self)
     }
-    pub fn branch_if(&mut self, cond: VarId, block: BlockId) {
-        self.insts.push(Instruction::BranchIf { cond, block })
+    pub fn conditional_branch(mut self, cond: Var, block1: BlockId, block2: BlockId, function: &mut Function) {
+        self.exit = ExitInstruction::ConditionalBranch { cond, block1, block2 };
+        function.submit_block(self)
     }
-    pub fn branch(&mut self, block: BlockId) {
-        self.insts.push(Instruction::Branch { block })
+    pub fn branch(mut self, block: BlockId, function: &mut Function) {
+        self.exit = ExitInstruction::Branch { block };
+        function.submit_block(self)
+    }
+    pub fn get_instructions(&mut self) -> &mut Vec<Instruction> {
+        &mut self.insts
     }
 }
 
@@ -182,9 +200,6 @@ impl fmt::Display for Program {
                         Instruction::Phi { dest, cond, a, b } => {
                             writeln!(f, "r{} = phi(r{}, r{}, r{})", dest.id, cond.id, a.id, b.id)?
                         }
-                        Instruction::Return => {
-                            writeln!(f, "return")?
-                        }
                         Instruction::Call { function, args, returns } => {
                             let mut iter = returns.iter();
                             if let Some(var) = iter.next() {
@@ -204,16 +219,29 @@ impl fmt::Display for Program {
                             }
                             writeln!(f, ")")?;
                         }
-                        Instruction::BranchIf { cond, block } => {
-                            writeln!(f, "if r{} goto b{}", cond.id, block.id)?;
-                        }
-                        Instruction::Branch { block } => {
-                            writeln!(f, "goto b{}", block.id)?;
-                        }
                     }
                 }
+                write!(f, "        ")?;
+                match block.exit {
+                    ExitInstruction::Return => {
+                        writeln!(f, "return")?
+                    }
+                    ExitInstruction::ConditionalBranch { cond, block1, block2 } => {
+                        writeln!(f, "if r{} goto b{} else goto b{}", cond.id, block1.id, block2.id)?;
+                    }
+                    ExitInstruction::Branch { block } => {
+                        writeln!(f, "goto b{}", block.id)?;
+                    }
+                }
+                writeln!(f, "")?;
             }
         }
         Ok(())
+    }
+}
+
+impl Var {
+    pub fn get_id(&self) -> usize {
+        self.id
     }
 }

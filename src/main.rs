@@ -19,7 +19,7 @@ fn main() {
     let mut function = Function::new();
     let mut block = function.new_block();
     let _ = compile(&ast, &mut Scope::new(), &mut program, &mut function, &mut block).unwrap();
-    function.submit_block(block);
+    block.ret(&mut function);
     program.add_function(function);
     println!("{}", program);
 }
