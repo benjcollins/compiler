@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell, collections::{HashSet, HashMap}};
+use std::{rc::Rc, cell::RefCell};
 use crate::ir::{Var, FunctionId, Block, Function};
 use crate::ast::{Parsed, Expr};
 
@@ -80,7 +80,7 @@ impl<'a, 'b> Type<'a, 'b> {
         match self {
             Type::Int(_) => Type::Int(vars[0]),
             Type::Bool(_) => Type::Bool(vars[0]),
-            Type::Maybe(var, ty) => Type::Maybe(vars[0], Box::new(ty.map_to(&vars[1..]))),
+            Type::Maybe(_, ty) => Type::Maybe(vars[0], Box::new(ty.map_to(&vars[1..]))),
             Type::Tuple(types) => {
                 let mut vec = vec![];
                 for ty in types {
@@ -96,7 +96,7 @@ impl<'a, 'b> Type<'a, 'b> {
         match self {
             Type::Int(_) => 1,
             Type::Bool(_) => 1,
-            Type::Maybe(var, ty) => 1 + ty.size(),
+            Type::Maybe(_, ty) => 1 + ty.size(),
             Type::Tuple(types) => types.iter().map(|ty| ty.size()).sum(),
             Type::Func { .. } => 0,
         }
