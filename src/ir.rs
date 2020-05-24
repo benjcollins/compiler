@@ -82,6 +82,9 @@ impl Program {
         self.functions.push(function);
         FunctionId { id }
     }
+    pub fn get_functions(&mut self) -> &mut [Function] {
+        &mut self.functions
+    }
 }
 
 impl Function {
@@ -115,6 +118,15 @@ impl Function {
     }
     pub fn get_block(&mut self, id: BlockId) -> &mut Block {
         &mut self.blocks[id.id]
+    }
+    pub fn get_returns(&self) -> &[Var] {
+        &self.returns
+    }
+}
+
+impl BlockId {
+    pub fn main_block() -> BlockId {
+        BlockId { id: 0 }
     }
 }
 
@@ -159,6 +171,9 @@ impl Block {
     }
     pub fn get_instructions(&mut self) -> &mut Vec<Instruction> {
         &mut self.insts
+    }
+    pub fn get_exit(&self) -> &ExitInstruction {
+        &self.exit
     }
 }
 
