@@ -23,8 +23,8 @@ impl<'a> CompileError<'a> {
     }
 }
 
-pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
-    let returns = block.call(imp.function, argument_ty.get_used_vars(), imp.return_ty.size(), function);
+pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a, 'b>, program: &mut Program, block: &mut Block) -> Type<'a, 'b> {
+    let returns = block.call(imp.function, argument_ty.get_used_vars(), program);
     imp.return_ty.map_to(&returns)
 }
 
@@ -32,14 +32,14 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
     match expr.get_node() {
         Expr::IntLiteral(source) => {
             let value = source.parse::<i32>().unwrap();
-            Ok(Type::Int(block.constant_int(value, function)))
+            Ok(Type::Int(block.constant_int(value, program)))
         }
         Expr::Binary { left, right, op } => match op {
             BinaryOp::Plus => {
                 let left = compile(left, scope, program, function, block)?;
                 let right = compile(right, scope, program, function, block)?;
                 match (left, right) {
-                    (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, function))),
+                    (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, program))),
                     _ => Err(CompileError::type_error(expr.get_source()))
                 }
             }
@@ -49,20 +49,20 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                         let argument_ty = compile(right, scope, program, function, block)?;
                         for imp in impls.borrow().iter() {
                             if imp.param_ty == argument_ty {
-                                return Ok(call_function(imp, argument_ty, function, block))
+                                return Ok(call_function(imp, argument_ty, program, block))
                             }
                         }
                         let mut new_function = Function::new();
                         let mut new_block = new_function.new_block();
-                        let param_ty = argument_ty.as_parameter_ty(&mut new_function);
+                        let param_ty = argument_ty.as_parameter_ty(&mut new_function, program);
                         let mut function_scope = Scope::new();
                         match_pattern(pattern, param_ty.clone(), &mut function_scope)?;
                         let return_ty = compile(expr, &mut function_scope, program, &mut new_function, &mut new_block)?;
                         return_ty.return_ty(&mut new_function);
-                        new_block.ret(function);
+                        new_block.ret(&mut new_function);
                         let new_function_id = program.add_function(new_function);
                         let imp = Implementation { param_ty, return_ty: return_ty.clone(), function: new_function_id };
-                        let return_ty = call_function(&imp, argument_ty, function, block);
+                        let return_ty = call_function(&imp, argument_ty, program, block);
                         impls.borrow_mut().push(imp);
                         Ok(return_ty)
                     }
@@ -82,7 +82,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                     let conc = compile(right, scope, program, function, &mut cond_block)?;
                     cond_block.branch(exit_block.get_id(), function);
                     *block = exit_block;
-                    Ok(Type::merge(tag, &*ty, &conc, function, block))
+                    Ok(Type::merge(tag, &*ty, &conc, program, block))
                 } else {
                     Err(CompileError::type_error(expr.get_source()))
                 }
@@ -127,7 +127,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             Ok(func)
         },
         Expr::BoolLiteral(source) => {
-            Ok(Type::Bool(block.constant_int(if *source == "true" { 1 } else { 0 }, function)))
+            Ok(Type::Bool(block.constant_int(if *source == "true" { 1 } else { 0 }, program)))
         }
     }
 }

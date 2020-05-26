@@ -2,13 +2,13 @@ use std::fmt;
 
 pub struct Program {
     functions: Vec<Function>,
+    variable_count: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct Function {
     params: Vec<Var>,
     returns: Vec<Var>,
-    variable_count: usize,
     blocks: Vec<Block>,
 }
 
@@ -75,6 +75,7 @@ impl Program {
     pub fn new() -> Program {
         Program {
             functions: vec![],
+            variable_count: 0,
         }
     }
     pub fn add_function(&mut self, function: Function) -> FunctionId {
@@ -82,19 +83,19 @@ impl Program {
         self.functions.push(function);
         FunctionId { id }
     }
-}
-
-impl Function {
-    pub fn new() -> Function {
-        Function { params: vec![], blocks: vec![], returns: vec![], variable_count: 0 }
-    }
-    fn new_local_variable(&mut self) -> Var {
+    fn new_variable(&mut self) -> Var {
         let variable = Var { id: self.variable_count };
         self.variable_count += 1;
         variable
     }
-    pub fn new_parameter(&mut self) -> Var {
-        let var = self.new_local_variable();
+}
+
+impl Function {
+    pub fn new() -> Function {
+        Function { params: vec![], blocks: vec![], returns: vec![] }
+    }
+    pub fn new_parameter(&mut self, program: &mut Program) -> Var {
+        let var = program.new_variable();
         self.params.push(var);
         var
     }
@@ -110,9 +111,6 @@ impl Function {
         let id = block.id;
         self.blocks[id] = block;
     }
-    pub fn get_variable_count(&self) -> usize {
-        self.variable_count
-    }
     pub fn get_block(&mut self, id: BlockId) -> &mut Block {
         &mut self.blocks[id.id]
     }
@@ -122,25 +120,25 @@ impl Block {
     pub fn get_id(&self) -> BlockId {
         BlockId { id: self.id }
     }
-    pub fn add_int(&mut self, a: Var, b: Var, function: &mut Function) -> Var {
-        let dest = function.new_local_variable();
+    pub fn add_int(&mut self, a: Var, b: Var, program: &mut Program) -> Var {
+        let dest = program.new_variable();
         self.insts.push(Instruction::AddInt { dest, a, b });
         dest
     }
-    pub fn constant_int(&mut self, constant: i32, function: &mut Function) -> Var {
-        let dest = function.new_local_variable();
+    pub fn constant_int(&mut self, constant: i32, program: &mut Program) -> Var {
+        let dest = program.new_variable();
         self.insts.push(Instruction::ConstantInt { dest, constant });
         dest
     }
-    pub fn phi(&mut self, cond: Var, a: Var, b: Var, function: &mut Function) -> Var {
-        let dest = function.new_local_variable();
+    pub fn phi(&mut self, cond: Var, a: Var, b: Var, program: &mut Program) -> Var {
+        let dest = program.new_variable();
         self.insts.push(Instruction::Phi { dest, cond, a, b });
         dest
     }
-    pub fn call(&mut self, target_function_id: FunctionId, args: Vec<Var>, return_count: usize, function: &mut Function) -> Vec<Var> {
+    pub fn call(&mut self, target_function_id: FunctionId, args: Vec<Var>, program: &mut Program) -> Vec<Var> {
         let mut returns = Vec::new();
-        for _ in 0..return_count {
-            returns.push(function.new_local_variable())
+        for _ in 0..program.functions[target_function_id.id].returns.len() {
+            returns.push(program.new_variable())
         }
         self.insts.push(Instruction::Call { function: target_function_id, args, returns: returns.clone() });
         returns

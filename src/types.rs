@@ -1,5 +1,5 @@
-use std::{rc::Rc, cell::RefCell, collections::{HashSet, HashMap}};
-use crate::ir::{Var, FunctionId, Block, Function};
+use std::{rc::Rc, cell::RefCell};
+use crate::ir::{Var, FunctionId, Block, Function, Program};
 use crate::ast::{Parsed, Expr};
 
 #[derive(Debug, Clone)]
@@ -43,14 +43,14 @@ impl<'a, 'b> PartialEq for Type<'a, 'b> {
 impl<'a, 'b> Eq for Type<'a, 'b> {}
 
 impl<'a, 'b> Type<'a, 'b> {
-    pub fn merge(cond: Var, a: &Type<'a, 'b>, b: &Type<'a, 'b>, function: &mut Function, block: &mut Block) -> Type<'a, 'b> {
+    pub fn merge(cond: Var, a: &Type<'a, 'b>, b: &Type<'a, 'b>, program: &mut Program, block: &mut Block) -> Type<'a, 'b> {
         match (a, b) {
-            (Type::Int(a), Type::Int(b)) => Type::Int(block.phi(cond, *a, *b, function)),
-            (Type::Bool(a), Type::Bool(b)) => Type::Bool(block.phi(cond, *a, *b, function)),
+            (Type::Int(a), Type::Int(b)) => Type::Int(block.phi(cond, *a, *b, program)),
+            (Type::Bool(a), Type::Bool(b)) => Type::Bool(block.phi(cond, *a, *b, program)),
             (Type::Tuple(atypes), Type::Tuple(btypes)) if atypes.len() == btypes.len() => {
                 let mut types = vec![];
                 for (a, b) in atypes.iter().zip(btypes) {
-                    types.push(Type::merge(cond, a, b, function, block))
+                    types.push(Type::merge(cond, a, b, program, block))
                 }
                 Type::Tuple(types)
             }
@@ -80,7 +80,7 @@ impl<'a, 'b> Type<'a, 'b> {
         match self {
             Type::Int(_) => Type::Int(vars[0]),
             Type::Bool(_) => Type::Bool(vars[0]),
-            Type::Maybe(var, ty) => Type::Maybe(vars[0], Box::new(ty.map_to(&vars[1..]))),
+            Type::Maybe(_, ty) => Type::Maybe(vars[0], Box::new(ty.map_to(&vars[1..]))),
             Type::Tuple(types) => {
                 let mut vec = vec![];
                 for ty in types {
@@ -96,15 +96,15 @@ impl<'a, 'b> Type<'a, 'b> {
         match self {
             Type::Int(_) => 1,
             Type::Bool(_) => 1,
-            Type::Maybe(var, ty) => 1 + ty.size(),
+            Type::Maybe(_, ty) => 1 + ty.size(),
             Type::Tuple(types) => types.iter().map(|ty| ty.size()).sum(),
             Type::Func { .. } => 0,
         }
     }
-    pub fn as_parameter_ty(&self, function: &mut Function) -> Type<'a, 'b> {
+    pub fn as_parameter_ty(&self, function: &mut Function, program: &mut Program) -> Type<'a, 'b> {
         let mut vars = vec![];
         for _ in 0..self.size() {
-            vars.push(function.new_parameter());
+            vars.push(function.new_parameter(program));
         }
         self.map_to(&vars)
     }

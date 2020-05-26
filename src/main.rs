@@ -18,8 +18,9 @@ fn main() {
     let mut program = Program::new();
     let mut function = Function::new();
     let mut block = function.new_block();
-    let _ = compile(&ast, &mut Scope::new(), &mut program, &mut function, &mut block).unwrap();
+    let ty = compile(&ast, &mut Scope::new(), &mut program, &mut function, &mut block).unwrap();
     block.ret(&mut function);
+    ty.return_ty(&mut function);
     program.add_function(function);
     println!("{}", program);
 }
