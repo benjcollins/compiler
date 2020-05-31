@@ -88,6 +88,12 @@ impl Program {
         self.variable_count += 1;
         variable
     }
+    pub fn get_variable_count(&self) -> usize {
+        self.variable_count
+    }
+    pub fn get_function(&self, function_id: FunctionId) -> &Function {
+        &self.functions[function_id.id]
+    }
 }
 
 impl Function {
@@ -111,8 +117,20 @@ impl Function {
         let id = block.id;
         self.blocks[id] = block;
     }
-    pub fn get_block(&mut self, id: BlockId) -> &mut Block {
-        &mut self.blocks[id.id]
+    pub fn get_block(&self, id: BlockId) -> &Block {
+        &self.blocks[id.id]
+    }
+    pub fn get_params(&self) -> &Vec<Var> {
+        &self.params
+    }
+    pub fn get_returns(&self) -> &Vec<Var> {
+        &self.returns
+    }
+}
+
+impl BlockId {
+    pub fn entry() -> BlockId {
+        BlockId { id: 0 }
     }
 }
 
@@ -155,8 +173,11 @@ impl Block {
         self.exit = ExitInstruction::Branch { block };
         function.submit_block(self)
     }
-    pub fn get_instructions(&mut self) -> &mut Vec<Instruction> {
-        &mut self.insts
+    pub fn get_instructions(&self) -> &Vec<Instruction> {
+        &self.insts
+    }
+    pub fn get_exit_instruction(&self) -> &ExitInstruction {
+        &self.exit
     }
 }
 
