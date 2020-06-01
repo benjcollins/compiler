@@ -15,10 +15,10 @@ pub enum ParseErrorType {
 
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
 enum Prec {
-    Top,
     Block,
     Tuple,
-    Bottom,
+    Expr,
+    Sum,
 }
 
 impl<'a> ParseError<'a> {
@@ -36,7 +36,7 @@ fn skip_spaces(pos: Position) -> Position {
 
 fn parse_block<'a>(start: Position<'a>) -> Result<Parsed<'a, Expr<'a>>, ParseError<'a>> {
     let expr = match start.next() {
-        Some((pos, '{')) => parse(skip_spaces(pos), Prec::Top),
+        Some((pos, '{')) => parse(skip_spaces(pos), Prec::Block),
         _ => Err(ParseError::expected_string(start, "{"))
     }?;
     match skip_spaces(expr.end()).next() {
@@ -91,16 +91,16 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
     loop {
         let start = skip_spaces(left.end());
         left = match start.next() {
-            Some((pos, '+')) if prec < Prec::Bottom => {
+            Some((pos, '+')) if prec < Prec::Sum => {
                 Expr::new_binary(left, parse(skip_spaces(pos), prec)?, BinaryOp::Plus)
             }
-            Some((pos, '=')) if prec < Prec::Bottom => {
-                Expr::new_binary(left, parse(skip_spaces(pos), Prec::Bottom)?, BinaryOp::SingleEquals)
+            Some((pos, '=')) if prec < Prec::Expr => {
+                Expr::new_binary(left, parse(skip_spaces(pos), Prec::Expr)?, BinaryOp::SingleEquals)
             }
             Some((_, '(')) => {
-                Expr::new_binary(left, parse(start, Prec::Bottom)?, BinaryOp::Bracket)
+                Expr::new_binary(left, parse(start, Prec::Tuple)?, BinaryOp::Bracket)
             }
-            Some((pos, ',')) if prec < Prec::Tuple => {
+            Some((pos, ',')) if prec <= Prec::Tuple => {
                 Expr::new_tuple(left, parse(skip_spaces(pos), Prec::Tuple)?)
             }
             Some((_, ch)) if ch.is_alphabetic() => {
@@ -108,8 +108,8 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                 let keyword = Position::slice(start, end);
                 match keyword {
                     "else" => Expr::new_binary(left, parse_block(skip_spaces(end))?, BinaryOp::Else),
-                    _ => if prec < Prec::Block && ch != '}' {
-                        Expr::new_block(left, parse(start, Prec::Block)?)
+                    _ => if prec <= Prec::Block && ch != '}' {
+                        Expr::new_block(left, parse(start, Prec::Expr)?)
                     } else {
                         return Ok(left)
                     }
@@ -121,5 +121,5 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
 }
 
 pub fn parse_source(source: &str) -> Result<Parsed<Expr>, ParseError> {
-    parse(Position::from_source(source), Prec::Top)
+    parse(Position::from_source(source), Prec::Block)
 }
