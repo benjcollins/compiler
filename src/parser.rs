@@ -94,7 +94,7 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
             Some((pos, '+')) if prec < Prec::Sum => {
                 Expr::new_binary(left, parse(skip_spaces(pos), prec)?, BinaryOp::Plus)
             }
-            Some((pos, '=')) if prec < Prec::Expr => {
+            Some((pos, '=')) if prec <= Prec::Expr => {
                 Expr::new_binary(left, parse(skip_spaces(pos), Prec::Expr)?, BinaryOp::SingleEquals)
             }
             Some((_, '(')) => {
