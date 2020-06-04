@@ -15,6 +15,8 @@ use execute::VirtualMachine;
 fn main() {
     let source = fs::read_to_string("example.txt").unwrap();
     let ast = parser::parse_source(&source).unwrap();
+    println!("{}", ast.node);
+
     let mut program = Program::new();
     let mut function = Function::new();
     let mut block = function.new_block();

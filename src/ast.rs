@@ -1,4 +1,5 @@
 use crate::position::Position;
+use std::fmt;
 
 #[derive(Debug)]
 pub struct Parsed<'a, T> {
@@ -82,5 +83,78 @@ impl<'a> Expr<'a> {
             }
             _ => Expr::Block { exprs: vec![left], last: Box::new(right) }
         })
+    }
+    pub fn write(&self, f: &mut fmt::Formatter, align: usize) -> fmt::Result {
+        match self {
+            Expr::IntLiteral(src) => write!(f, "{}", src)?,
+            Expr::BoolLiteral(src) => write!(f, "{}", src)?,
+            Expr::Ident(src) => write!(f, "{}", src)?,
+            Expr::Tuple { exprs } => {
+                let mut iter = exprs.iter();
+                write!(f, "(")?;
+                if let Some(expr) = iter.next() {
+                    expr.node.write(f, align)?;
+                    for expr in iter {
+                        write!(f, ", ")?;
+                        expr.node.write(f, align)?;
+                    }
+                }
+                write!(f, ")")?;
+            }
+            Expr::Block { exprs, last } => {
+                writeln!(f, "{{")?;
+                for expr in exprs {
+                    indent(f, align+4)?;
+                    expr.node.write(f, align+4)?;
+                    writeln!(f, "")?;
+                }
+                indent(f, align+4)?;
+                last.node.write(f, align+4)?;
+                writeln!(f, "\n}}")?;
+            }
+            Expr::Func { name, pattern, expr } => {
+                write!(f, "fn")?;
+                match name {
+                    Some(name) => write!(f, " {}", name)?,
+                    None => {},
+                }
+                write!(f, "(")?;
+                pattern.node.write(f, align)?;
+                write!(f, ") ")?;
+                expr.node.write(f, align)?;
+                writeln!(f, "")?;
+            }
+            Expr::Binary { left, right, op } => {
+                left.node.write(f, align)?;
+                write!(f, "{}", match op {
+                    BinaryOp::Plus => " + ",
+                    BinaryOp::Bracket => " (",
+                    BinaryOp::SingleEquals => " = ",
+                    BinaryOp::Else => " else ",
+                })?;
+                right.node.write(f, align)?;
+                write!(f, "{}", if let BinaryOp::Bracket = op { ")" } else { "" })?;
+            }
+            Expr::If { cond, conc } => {
+                write!(f, "if ")?;
+                cond.node.write(f, align)?;
+                write!(f, " ")?;
+                conc.node.write(f, align)?;
+            }
+        };
+        Ok(())
+    }
+}
+
+fn indent(f: &mut fmt::Formatter, align: usize) -> fmt::Result {
+    for _ in 0..align {
+        write!(f, " ")?;
+    }
+    Ok(())
+}
+
+impl<'a> fmt::Display for Expr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.write(f, 0)
     }
 }
