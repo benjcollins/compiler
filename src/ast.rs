@@ -84,7 +84,7 @@ impl<'a> Expr<'a> {
             _ => Expr::Block { exprs: vec![left], last: Box::new(right) }
         })
     }
-    pub fn write(&self, f: &mut fmt::Formatter, align: usize) -> fmt::Result {
+    pub fn write(&self, f: &mut fmt::Formatter, align: i32) -> fmt::Result {
         match self {
             Expr::IntLiteral(src) => write!(f, "{}", src)?,
             Expr::BoolLiteral(src) => write!(f, "{}", src)?,
@@ -104,11 +104,11 @@ impl<'a> Expr<'a> {
             Expr::Block { exprs, last } => {
                 writeln!(f, "{{")?;
                 for expr in exprs {
-                    indent(f, align+4)?;
+                    write!(f, "{}", Indent(align+4))?;
                     expr.node.write(f, align+4)?;
                     writeln!(f, "")?;
                 }
-                indent(f, align+4)?;
+                write!(f, "{}", Indent(align+4))?;
                 last.node.write(f, align+4)?;
                 writeln!(f, "\n}}")?;
             }
@@ -146,11 +146,15 @@ impl<'a> Expr<'a> {
     }
 }
 
-fn indent(f: &mut fmt::Formatter, align: usize) -> fmt::Result {
-    for _ in 0..align {
-        write!(f, " ")?;
+struct Indent(i32);
+
+impl fmt::Display for Indent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for _ in 0..self.0 {
+            write!(f, " ")?;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 impl<'a> fmt::Display for Expr<'a> {
