@@ -14,14 +14,12 @@ impl<'a> Position<'a> {
     }
     pub fn next(&self) -> Option<(Position<'a>, char)> {
         let mut chars = self.source.chars();
-        match chars.next() {
-            Some(ch) => if ch == '\n' {
-                Some((Position::new(self.line + 1, 0, chars.as_str()), ch))
-            } else {
-                Some((Position::new(self.line, self.column + 1, chars.as_str()), ch))
-            }
-            None => None
-        }
+        let ch = chars.next()?;
+        Some(if ch == '\n' {
+            (Position::new(self.line + 1, 0, chars.as_str()), '\n')
+        } else {
+            (Position::new(self.line, self.column + 1, chars.as_str()), ch)
+        })
     }
     pub fn len(&self) -> usize {
         self.source.len()
