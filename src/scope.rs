@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 use crate::types::Type;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scope<'a, 'b> {
     node: Rc<RefCell<ScopeNode<'a, 'b>>>,
 }
@@ -28,6 +28,9 @@ impl<'a, 'b> Scope<'a, 'b> {
     }
     pub fn get(&self, search: &'a str) -> Option<Type<'a, 'b>> {
         self.node.borrow().get(search)
+    }
+    pub fn closure(&self) -> Scope<'a, 'b> {
+        Scope { node: Rc::clone(&self.node) }
     }
 }
 
