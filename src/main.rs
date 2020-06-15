@@ -9,7 +9,7 @@ mod execute;
 
 use scope::Scope;
 use std::fs;
-use ir::{Function, Program};
+use ir::Program;
 use execute::VirtualMachine;
 
 fn main() {
@@ -18,20 +18,13 @@ fn main() {
     println!("{}", ast.node);
 
     let mut program = Program::new();
-    let mut function = Function::new();
-    let mut block = function.new_block();
-    let ty = compiler::compile(&ast, &mut Scope::new(), &mut program, &mut function, &mut block).unwrap();
-    block.ret(&mut function);
-    ty.return_ty(&mut function);
-    let main_id = program.add_function(function);
+    let mut block = program.new_block();
+    let block_id = block.get_id();
+    let ty = compiler::compile(&ast, &mut Scope::new(), &mut program, &mut block).unwrap();
+    block.ret(&mut program);
     println!("{}", program);
 
-    let function = program.get_function(main_id);
-
     let mut vm = VirtualMachine::new(&program);
-    vm.execute(function);
-
-    for var in function.get_returns() {
-        println!("{}", vm.get_register(*var))
-    }
+    vm.execute(block_id);
+    println!("{}", vm.format_ty(&ty))
 }

@@ -1,5 +1,5 @@
 use crate::ast::{Parsed, Expr, BinaryOp};
-use crate::{scope::Scope, ir::{Program, Block, Function}, types::{Implementation, Type}};
+use crate::{scope::Scope, ir::{Program, Block}, types::{Implementation, Type}};
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
@@ -23,46 +23,53 @@ impl<'a> CompileError<'a> {
     }
 }
 
-pub fn call_function<'a, 'b>(imp: &Implementation<'a, 'b>, argument_ty: Type<'a, 'b>, program: &mut Program, block: &mut Block) -> Type<'a, 'b> {
-    let returns = block.call(imp.function, argument_ty.get_used_vars(), program);
-    imp.return_ty.map_to(&returns)
-}
-
-pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>, program: &mut Program, function: &mut Function, block: &mut Block) -> Result<Type<'a, 'b>, CompileError<'a>> {
+pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>, program: &mut Program, block: &mut Block) -> Result<Type<'a, 'b>, CompileError<'a>> {
     match expr.get_node() {
         Expr::IntLiteral(source) => {
             let value = source.parse::<i32>().unwrap();
-            Ok(Type::Int(block.constant_int(value, program)))
+            let dest = program.new_variable();
+            block.constant(value, dest);
+            Ok(Type::Int(dest))
+        }
+        Expr::BoolLiteral(source) => {
+            let value = if *source == "true" { 1 } else { 0 };
+            let dest = program.new_variable();
+            block.constant(value, dest);
+            Ok(Type::Bool(dest))
         }
         Expr::Binary { left, right, op } => match op {
             BinaryOp::Plus => {
-                let left = compile(left, scope, program, function, block)?;
-                let right = compile(right, scope, program, function, block)?;
+                let left = compile(left, scope, program, block)?;
+                let right = compile(right, scope, program, block)?;
                 match (left, right) {
-                    (Type::Int(a), Type::Int(b)) => Ok(Type::Int(block.add_int(a, b, program))),
+                    (Type::Int(a), Type::Int(b)) => {
+                        let dest = program.new_variable();
+                        block.add(a, b, dest);
+                        Ok(Type::Int(dest))
+                    },
                     _ => Err(CompileError::type_error(expr.get_source()))
                 }
             }
             BinaryOp::Bracket => {
-                match compile(left, scope, program, function, block)? {
+                match compile(left, scope, program, block)? {
                     Type::Func { pattern, expr, impls } => {
-                        let argument_ty = compile(right, scope, program, function, block)?;
+                        let argument_ty = compile(right, scope, program, block)?;
                         for imp in impls.borrow().iter() {
                             if imp.param_ty == argument_ty {
-                                return Ok(call_function(imp, argument_ty, program, block))
+                                imp.param_ty.merge(&argument_ty, block);
+                                block.call(imp.entry_block);
+                                return Ok(imp.return_ty.copy(program, block));
                             }
                         }
-                        let mut new_function = Function::new();
-                        let mut new_block = new_function.new_block();
-                        let param_ty = argument_ty.as_parameter_ty(&mut new_function, program);
+                        let mut new_block = program.new_block();
                         let mut function_scope = Scope::new();
-                        match_pattern(pattern, param_ty.clone(), &mut function_scope)?;
-                        let return_ty = compile(expr, &mut function_scope, program, &mut new_function, &mut new_block)?;
-                        return_ty.return_ty(&mut new_function);
-                        new_block.ret(&mut new_function);
-                        let new_function_id = program.add_function(new_function);
-                        let imp = Implementation { param_ty, return_ty: return_ty.clone(), function: new_function_id };
-                        let return_ty = call_function(&imp, argument_ty, program, block);
+                        match_pattern(pattern, argument_ty.clone(), &mut function_scope)?;
+                        let return_ty = compile(expr, &mut function_scope, program, &mut new_block)?;
+                        let block_id = new_block.get_id();
+                        new_block.ret(program);
+                        block.call(block_id);
+                        let return_ty = return_ty.copy(program, block);
+                        let imp = Implementation { param_ty: argument_ty, return_ty: return_ty.clone(), entry_block: block_id };
                         impls.borrow_mut().push(imp);
                         Ok(return_ty)
                     }
@@ -70,31 +77,32 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
                 }
             },
             BinaryOp::SingleEquals => {
-                let ty = compile(right, scope, program, function, block)?;
+                let ty = compile(right, scope, program, block)?;
                 match_pattern(left, ty.clone(), scope)?;
                 Ok(ty)
             }
             BinaryOp::Else => {
-                if let Type::Maybe(tag, ty) = compile(left, scope, program, function, block)? {
-                    let mut cond_block = function.new_block();
-                    let exit_block = function.new_block();
-                    block.clone().conditional_branch(tag, exit_block.get_id(), cond_block.get_id(), function);
-                    let conc = compile(right, scope, program, function, &mut cond_block)?;
-                    cond_block.branch(exit_block.get_id(), function);
+                if let Type::Maybe(tag, ty) = compile(left, scope, program, block)? {
+                    let mut cond_block = program.new_block();
+                    let exit_block = program.new_block();
+                    block.clone().conditional_branch(tag, exit_block.get_id(), cond_block.get_id(), program);
+                    let conc = compile(right, scope, program, &mut cond_block)?;
+                    cond_block.branch(exit_block.get_id(), program);
                     *block = exit_block;
-                    Ok(Type::merge(tag, &*ty, &conc, program, block))
+                    ty.merge(&conc, block);
+                    Ok(*ty)
                 } else {
                     Err(CompileError::type_error(expr.get_source()))
                 }
             },
         }
         Expr::If { cond, conc } => {
-            if let Type::Bool(cond) = compile(cond, scope, program, function, block)? {
-                let mut cond_block = function.new_block();
-                let exit_block = function.new_block();
-                block.clone().conditional_branch(cond, cond_block.get_id(), exit_block.get_id(), function);
-                let conc = compile(conc, scope, program, function, &mut cond_block)?;
-                cond_block.branch(exit_block.get_id(), function);
+            if let Type::Bool(cond) = compile(cond, scope, program, block)? {
+                let mut cond_block = program.new_block();
+                let exit_block = program.new_block();
+                block.clone().conditional_branch(cond, cond_block.get_id(), exit_block.get_id(), program);
+                let conc = compile(conc, scope, program, &mut cond_block)?;
+                cond_block.branch(exit_block.get_id(), program);
                 *block = exit_block;
                 Ok(Type::Maybe(cond, Box::new(conc)))
             } else {
@@ -104,15 +112,15 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
         Expr::Tuple { exprs } => {
             let mut types = Vec::new();
             for expr in exprs {
-                types.push(compile(expr, scope, program, function, block)?)
+                types.push(compile(expr, scope, program, block)?)
             }
             Ok(Type::Tuple(types))
         }
         Expr::Block { exprs, last } => {
             for expr in exprs {
-                compile(expr, scope, program, function, block)?;
+                compile(expr, scope, program, block)?;
             }
-            compile(last, scope, program, function, block)
+            compile(last, scope, program, block)
         },
         Expr::Ident(source) => match scope.get(source) {
             Some(ty) => Ok(ty),
@@ -126,9 +134,7 @@ pub fn compile<'a, 'b>(expr: &'b Parsed<'a, Expr<'a>>, scope: &mut Scope<'a, 'b>
             };
             Ok(func)
         },
-        Expr::BoolLiteral(source) => {
-            Ok(Type::Bool(block.constant_int(if *source == "true" { 1 } else { 0 }, program)))
-        }
+        Expr::Struct { body } => unimplemented!(),
     }
 }
 

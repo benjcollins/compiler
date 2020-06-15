@@ -1,5 +1,5 @@
 use std::{rc::Rc, cell::RefCell};
-use crate::ir::{Var, FunctionId, Block, Function, Program};
+use crate::ir::{Var, Block, Program, BlockId};
 use crate::ast::{Parsed, Expr};
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub enum Type<'a, 'b> {
 pub struct Implementation<'a, 'b> {
     pub param_ty: Type<'a, 'b>,
     pub return_ty: Type<'a, 'b>,
-    pub function: FunctionId,
+    pub entry_block: BlockId,
 }
 
 impl<'a, 'b> PartialEq for Type<'a, 'b> {
@@ -43,74 +43,35 @@ impl<'a, 'b> PartialEq for Type<'a, 'b> {
 impl<'a, 'b> Eq for Type<'a, 'b> {}
 
 impl<'a, 'b> Type<'a, 'b> {
-    pub fn merge(cond: Var, a: &Type<'a, 'b>, b: &Type<'a, 'b>, program: &mut Program, block: &mut Block) -> Type<'a, 'b> {
-        match (a, b) {
-            (Type::Int(a), Type::Int(b)) => Type::Int(block.phi(cond, *a, *b, program)),
-            (Type::Bool(a), Type::Bool(b)) => Type::Bool(block.phi(cond, *a, *b, program)),
+    pub fn merge(&self, other: &Type<'a, 'b>, block: &mut Block) {
+        match (self, other) {
+            (Type::Int(a), Type::Int(b)) => {
+                block.move_var(*b, *a);
+            }
+            (Type::Bool(a), Type::Bool(b)) => {
+                block.move_var(*b, *a);
+            }
             (Type::Tuple(atypes), Type::Tuple(btypes)) if atypes.len() == btypes.len() => {
                 let mut types = vec![];
                 for (a, b) in atypes.iter().zip(btypes) {
-                    types.push(Type::merge(cond, a, b, program, block))
+                    types.push(Type::merge(a, b, block))
                 }
-                Type::Tuple(types)
             }
             _ => unimplemented!(),
         }
     }
-    pub fn get_used_vars(&self) -> Vec<Var> {
-        let mut vars = Vec::new();
-        self.add_vars_to_vec(&mut vars);
-        vars.iter().cloned().collect::<Vec<Var>>()
-    }
-    pub fn add_vars_to_vec(&self, map: &mut Vec<Var>) {
+    pub fn duplicate(&self, program: &mut Program) -> Type<'a, 'b> {
         match self {
-            Type::Int(var) => { map.push(*var); },
-            Type::Bool(var) => { map.push(*var); },
-            Type::Maybe(var, ty) => {
-                map.push(*var);
-                ty.add_vars_to_vec(map);
-            },
-            Type::Tuple(types) => for ty in types {
-                ty.add_vars_to_vec(map)
-            }
-            Type::Func { .. } => (),
+            Type::Int(_) => Type::Int(program.new_variable()),
+            Type::Bool(_) => Type::Bool(program.new_variable()),
+            Type::Maybe(_, ty) => Type::Maybe(program.new_variable(), ty.clone()),
+            Type::Tuple(types) => Type::Tuple(types.iter().map(|ty| ty.duplicate(program)).collect()),
+            _ => unimplemented!(),
         }
     }
-    pub fn map_to(&self, mut vars: &[Var]) -> Type<'a, 'b> {
-        match self {
-            Type::Int(_) => Type::Int(vars[0]),
-            Type::Bool(_) => Type::Bool(vars[0]),
-            Type::Maybe(_, ty) => Type::Maybe(vars[0], Box::new(ty.map_to(&vars[1..]))),
-            Type::Tuple(types) => {
-                let mut vec = vec![];
-                for ty in types {
-                    vec.push(ty.map_to(&vars[..ty.size()]));
-                    vars = &vars[ty.size()..];
-                }
-                Type::Tuple(vec)
-            },
-            Type::Func { .. } => self.clone(),
-        }
-    }
-    pub fn size(&self) -> usize {
-        match self {
-            Type::Int(_) => 1,
-            Type::Bool(_) => 1,
-            Type::Maybe(_, ty) => 1 + ty.size(),
-            Type::Tuple(types) => types.iter().map(|ty| ty.size()).sum(),
-            Type::Func { .. } => 0,
-        }
-    }
-    pub fn as_parameter_ty(&self, function: &mut Function, program: &mut Program) -> Type<'a, 'b> {
-        let mut vars = vec![];
-        for _ in 0..self.size() {
-            vars.push(function.new_parameter(program));
-        }
-        self.map_to(&vars)
-    }
-    pub fn return_ty(&self, function: &mut Function) {
-        for var in self.get_used_vars() {
-            function.return_var(var)
-        }
+    pub fn copy(&self, program: &mut Program, block: &mut Block) -> Type<'a, 'b> {
+        let clone = self.duplicate(program);
+        clone.merge(self, block);
+        clone
     }
 }
