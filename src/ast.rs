@@ -33,6 +33,9 @@ pub enum Expr<'a> {
     If {
         cond: Box<Parsed<'a, Expr<'a>>>,
         conc: Box<Parsed<'a, Expr<'a>>>,
+    },
+    Struct {
+        body: Box<Parsed<'a, Expr<'a>>>,
     }
 }
 
@@ -141,6 +144,7 @@ impl<'a> Expr<'a> {
                 write!(f, " ")?;
                 conc.node.write(f, align)?;
             }
+            Expr::Struct { body } => body.node.write(f, align)?,
         };
         Ok(())
     }
