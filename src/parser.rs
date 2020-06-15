@@ -76,6 +76,13 @@ fn parse<'a>(start: Position<'a>, prec: Prec) -> Result<Parsed<'a, Expr<'a>>, Pa
                     let expr = parse(skip_lines(pattern.end()), Prec::Expr)?;
                     Ok(Parsed::new(start, expr.end(), Expr::Func { name: name.node, pattern: Box::new(pattern), expr: Box::new(expr) }))
                 }
+                "struct" => {
+                    let body = match skip_lines(end).next() {
+                        Some((_, '{')) => parse(skip_lines(end), Prec::Expr),
+                        _ => Err(ParseError::expected_string(skip_lines(end), "{")),
+                    }?;
+                    Ok(Parsed::new(start, body.end(), Expr::Struct { body: Box::new(body) }))
+                }
                 "if" => {
                     let cond = match skip_lines(end).next() {
                         Some((_, '(')) => parse(skip_lines(end), Prec::Expr),
